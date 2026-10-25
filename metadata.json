@@ -1,0 +1,6 @@
+{
+  "name": "MPSC Sarathi — Exam Portal, Subdomain Hub & Monetization Suite",
+  "description": "High-authority Marathi & English MPSC exam preparation portal for mpscsarathi.online featuring multi-subdomain architecture, AdSense-ready long-form study notes, affiliate bookstore, and sponsored post monetization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
