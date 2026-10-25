@@ -1,113 +1,224 @@
 import React, { useState, useMemo } from 'react';
+import { INITIAL_MCQ_QUESTIONS, McqQuestion, McqSubject } from './data/mcqData';
 import {
-  SubdomainKey,
-  SubdomainNode,
-  StudyArticle,
-  AffiliateBook,
-  SponsoredSlot,
-} from './types/portal';
-import {
-  INITIAL_SUBDOMAINS,
-  INITIAL_ARTICLES,
-  INITIAL_BOOKS,
-  INITIAL_SPONSORED_SLOTS,
-  INITIAL_ADSENSE_CHECKS,
-} from './data/mpscData';
-import { BookCoverIllustration, EditorialStudyDeskGraphic } from './components/BookCoverIllustration';
-import { ArticleReaderView } from './components/ArticleReaderView';
-import { SubdomainHubView } from './components/SubdomainHubView';
-import { MonetizationSuiteView } from './components/MonetizationSuiteView';
-import { CompliancePagesView } from './components/CompliancePagesView';
-import { ContentPublisherModal } from './components/ContentPublisherModal';
-import { Search, ArrowRight, ExternalLink, FileEdit, Plus } from 'lucide-react';
-
-type ActiveTab = 'editorial' | 'subdomains' | 'bookstore' | 'monetization' | 'compliance';
+  CheckCircle2,
+  XCircle,
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight,
+  HelpCircle,
+  Search,
+  ListChecks,
+  Layers,
+} from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('editorial');
-  const [activeSubdomain, setActiveSubdomain] = useState<SubdomainKey | 'all'>('all');
-  const [selectedSubject, setSelectedSubject] = useState<string>('All');
+  const [selectedSubject, setSelectedSubject] = useState<McqSubject | 'All'>('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'single' | 'list'>('single');
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Core Application State
-  const [subdomains, setSubdomains] = useState<SubdomainNode[]>(INITIAL_SUBDOMAINS);
-  const [articles, setArticles] = useState<StudyArticle[]>(INITIAL_ARTICLES);
-  const [books, setBooks] = useState<AffiliateBook[]>(INITIAL_BOOKS);
-  const [sponsoredSlots, setSponsoredSlots] = useState<SponsoredSlot[]>(INITIAL_SPONSORED_SLOTS);
+  // User Answers Map: questionId -> selected option index (0..3)
+  const [userAnswers, setUserAnswers] = useState<Record<string, number>>({});
+  // Revealed Explanations Map
+  const [revealedExplanations, setRevealedExplanations] = useState<Record<string, boolean>>({});
 
-  // Reader & Publisher Modal State
-  const [readingArticleId, setReadingArticleId] = useState<string | null>(null);
-  const [isPublisherOpen, setIsPublisherOpen] = useState(false);
-  const [publisherSubdomain, setPublisherSubdomain] = useState<SubdomainKey>('notes');
-  const [editingArticle, setEditingArticle] = useState<StudyArticle | null>(null);
-
-  const currentReadingArticle = useMemo(
-    () => articles.find((a) => a.id === readingArticleId) || null,
-    [articles, readingArticleId]
-  );
-
-  const filteredArticles = useMemo(() => {
-    return articles.filter((art) => {
-      const matchesSub = activeSubdomain === 'all' || art.subdomain === activeSubdomain;
-      const matchesSubj = selectedSubject === 'All' || art.subject === selectedSubject;
-      const q = searchQuery.trim().toLowerCase();
-      const matchesQuery =
-        !q ||
-        art.titleMr.toLowerCase().includes(q) ||
-        art.titleEn.toLowerCase().includes(q) ||
-        art.excerpt.toLowerCase().includes(q) ||
-        art.paperCode.toLowerCase().includes(q);
-      return matchesSub && matchesSubj && matchesQuery;
+  const filteredQuestions = useMemo(() => {
+    return INITIAL_MCQ_QUESTIONS.filter((q) => {
+      const matchesSubject = selectedSubject === 'All' || q.subject === selectedSubject;
+      const query = searchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !query ||
+        q.question.toLowerCase().includes(query) ||
+        q.explanation.toLowerCase().includes(query) ||
+        q.examTag.toLowerCase().includes(query) ||
+        q.options.some((o) => o.toLowerCase().includes(query));
+      return matchesSubject && matchesSearch;
     });
-  }, [articles, activeSubdomain, selectedSubject, searchQuery]);
+  }, [selectedSubject, searchQuery]);
 
-  const activeHostLabel = useMemo(() => {
-    if (activeSubdomain === 'all' || activeSubdomain === 'main') return 'mpscsarathi.online';
-    return `${activeSubdomain}.mpscsarathi.online`;
-  }, [activeSubdomain]);
+  const safeIndex = Math.min(currentIndex, Math.max(0, filteredQuestions.length - 1));
+  const activeQuestion = filteredQuestions[safeIndex] || null;
 
-  const handleSaveArticle = (saved: StudyArticle, isEdit: boolean) => {
-    if (isEdit) {
-      setArticles((prev) => prev.map((a) => (a.id === saved.id ? saved : a)));
-    } else {
-      setArticles((prev) => [saved, ...prev]);
-      setSubdomains((prev) =>
-        prev.map((s) => (s.key === saved.subdomain ? { ...s, articleCount: s.articleCount + 1 } : s))
-      );
-    }
-    setReadingArticleId(saved.id);
-    setEditingArticle(null);
+  // Score Statistics
+  const stats = useMemo(() => {
+    let attempted = 0;
+    let correct = 0;
+    let incorrect = 0;
+
+    filteredQuestions.forEach((q) => {
+      const ans = userAnswers[q.id];
+      if (ans !== undefined) {
+        attempted++;
+        if (ans === q.correctIndex) {
+          correct++;
+        } else {
+          incorrect++;
+        }
+      }
+    });
+
+    const accuracy = attempted > 0 ? Math.round((correct / attempted) * 100) : 0;
+    return {
+      total: filteredQuestions.length,
+      attempted,
+      correct,
+      incorrect,
+      accuracy,
+    };
+  }, [filteredQuestions, userAnswers]);
+
+  const handleSelectOption = (questionId: string, optionIdx: number) => {
+    setUserAnswers((prev) => ({
+      ...prev,
+      [questionId]: optionIdx,
+    }));
   };
 
-  const handleOpenCreateModal = (sub: SubdomainKey = 'notes') => {
-    setEditingArticle(null);
-    setPublisherSubdomain(sub);
-    setIsPublisherOpen(true);
+  const handleResetQuiz = () => {
+    setUserAnswers({});
+    setRevealedExplanations({});
+    setCurrentIndex(0);
   };
 
-  const handleOpenEditModal = (article: StudyArticle) => {
-    setEditingArticle(article);
-    setPublisherSubdomain(article.subdomain);
-    setIsPublisherOpen(true);
+  const handleSubjectChange = (subj: McqSubject | 'All') => {
+    setSelectedSubject(subj);
+    setCurrentIndex(0);
   };
 
-  const handleBookClick = (bookId: string) => {
-    setBooks((prev) =>
-      prev.map((b) => (b.id === bookId ? { ...b, monthlyClicks: b.monthlyClicks + 1 } : b))
-    );
-  };
+  const renderMcqCard = (q: McqQuestion, indexNumber: number) => {
+    const selectedOpt = userAnswers[q.id];
+    const isAnswered = selectedOpt !== undefined;
+    const isExplanationShown = isAnswered || Boolean(revealedExplanations[q.id]);
 
-  const handleUpdateSlotSponsor = (slotId: string, sponsorName: string | null) => {
-    setSponsoredSlots((prev) =>
-      prev.map((s) =>
-        s.id === slotId
-          ? {
-              ...s,
-              currentSponsor: sponsorName,
-              status: sponsorName ? 'Booked' : 'Available',
+    return (
+      <article
+        key={q.id}
+        className="bg-white border border-stone-200 rounded-lg p-6 sm:p-8 space-y-6 shadow-2xs"
+      >
+        {/* Clean Unboxed Metadata Line (Zero-Pill Discipline) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-stone-100 text-xs font-mono text-stone-500">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[#9A3412] font-semibold font-mono-tabular">
+              प्रश्न क्र. {String(indexNumber + 1).padStart(2, '0')}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="text-stone-800 font-sans font-medium">{q.subjectMr}</span>
+            <span aria-hidden="true">·</span>
+            <span className="font-sans">{q.examTag}</span>
+          </div>
+
+          {isAnswered && (
+            <span
+              className={`font-sans font-semibold ${
+                selectedOpt === q.correctIndex ? 'text-emerald-700' : 'text-red-700'
+              }`}
+            >
+              {selectedOpt === q.correctIndex ? '✓ अचूक उत्तर (+२ गुण)' : '✕ चुकीचे उत्तर'}
+            </span>
+          )}
+        </div>
+
+        {/* Question Stem */}
+        <h2 className="font-editorial text-lg sm:text-xl font-semibold text-stone-900 leading-relaxed">
+          {q.question}
+        </h2>
+
+        {/* 4 Interactive Options */}
+        <div className="space-y-3">
+          {q.options.map((optText, idx) => {
+            const isThisSelected = selectedOpt === idx;
+            const isThisCorrect = idx === q.correctIndex;
+
+            let optionStyle =
+              'bg-[#FBF9F5] border-stone-300 text-stone-800 hover:border-stone-500 hover:bg-stone-100/70';
+            if (isAnswered) {
+              if (isThisCorrect) {
+                optionStyle = 'bg-emerald-50/90 border-emerald-600 text-emerald-950 font-semibold';
+              } else if (isThisSelected && !isThisCorrect) {
+                optionStyle = 'bg-red-50/90 border-red-500 text-red-950';
+              } else {
+                optionStyle = 'bg-stone-50/60 border-stone-200 text-stone-500';
+              }
             }
-          : s
-      )
+
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSelectOption(q.id, idx)}
+                className={`w-full text-left px-4 py-3.5 rounded-md border text-sm sm:text-base transition-colors flex items-center justify-between gap-4 cursor-pointer ${optionStyle}`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="font-mono-tabular text-xs font-semibold mt-0.5 shrink-0 opacity-75">
+                    ({idx + 1})
+                  </span>
+                  <span className="leading-snug">{optText}</span>
+                </div>
+
+                {isAnswered && isThisCorrect && (
+                  <span className="inline-flex items-center gap-1 text-xs font-mono font-semibold text-emerald-700 shrink-0">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>अचूक पर्याय</span>
+                  </span>
+                )}
+                {isAnswered && isThisSelected && !isThisCorrect && (
+                  <span className="inline-flex items-center gap-1 text-xs font-mono font-semibold text-red-700 shrink-0">
+                    <XCircle className="w-4 h-4" />
+                    <span>तुमचे उत्तर</span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Toggle or Auto-Show Official Explanation */}
+        <div className="pt-2 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() =>
+              setRevealedExplanations((prev) => ({
+                ...prev,
+                [q.id]: !prev[q.id],
+              }))
+            }
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-[#9A3412] hover:underline cursor-pointer"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>
+              {isExplanationShown
+                ? 'स्पष्टीकरण लपवा (Hide Explanation)'
+                : 'उत्तर न निवडता स्पष्टीकरण पहा (Show Explanation)'}
+            </span>
+          </button>
+
+          {isAnswered && (
+            <button
+              type="button"
+              onClick={() => {
+                setUserAnswers((prev) => {
+                  const next = { ...prev };
+                  delete next[q.id];
+                  return next;
+                });
+              }}
+              className="text-xs text-stone-500 hover:text-stone-900 cursor-pointer"
+            >
+              हा प्रश्न पुन्हा सोडवा (Retry Question)
+            </button>
+          )}
+        </div>
+
+        {isExplanationShown && (
+          <div className="p-4 bg-[#F4F0EA] border border-stone-300/80 rounded-md text-sm text-stone-800 leading-relaxed space-y-1">
+            <p className="font-semibold text-stone-900">
+              अचूक उत्तर: पर्याय ({q.correctIndex + 1}) — {q.options[q.correctIndex]}
+            </p>
+            <p className="text-stone-700">{q.explanation}</p>
+          </div>
+        )}
+      </article>
     );
   };
 
@@ -120,637 +231,296 @@ export default function App() {
           href="#top"
           onClick={(e) => {
             e.preventDefault();
-            setReadingArticleId(null);
-            setActiveTab('editorial');
-            setActiveSubdomain('all');
+            handleSubjectChange('All');
           }}
           className="font-editorial text-xl font-bold tracking-tight text-stone-900 whitespace-nowrap shrink-0"
         >
           mpscsarathi.online
         </a>
 
-        {/* Zone 2: 5 concise single-line text navigation links */}
+        {/* Zone 2: 5 concise single-line subject navigation links */}
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-stone-600">
-          <button
-            onClick={() => {
-              setReadingArticleId(null);
-              setActiveTab('editorial');
-            }}
-            className={`hover:text-stone-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'editorial' ? 'text-[#9A3412] underline underline-offset-8 font-semibold' : ''
-            }`}
-          >
-            Editorial Hub
-          </button>
-          <button
-            onClick={() => {
-              setReadingArticleId(null);
-              setActiveTab('subdomains');
-            }}
-            className={`hover:text-stone-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'subdomains' ? 'text-[#9A3412] underline underline-offset-8 font-semibold' : ''
-            }`}
-          >
-            Subdomains
-          </button>
-          <button
-            onClick={() => {
-              setReadingArticleId(null);
-              setActiveTab('bookstore');
-            }}
-            className={`hover:text-stone-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'bookstore' ? 'text-[#9A3412] underline underline-offset-8 font-semibold' : ''
-            }`}
-          >
-            Bookstore
-          </button>
-          <button
-            onClick={() => {
-              setReadingArticleId(null);
-              setActiveTab('monetization');
-            }}
-            className={`hover:text-stone-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'monetization' ? 'text-[#9A3412] underline underline-offset-8 font-semibold' : ''
-            }`}
-          >
-            Monetization
-          </button>
-          <button
-            onClick={() => {
-              setReadingArticleId(null);
-              setActiveTab('compliance');
-            }}
-            className={`hover:text-stone-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'compliance' ? 'text-[#9A3412] underline underline-offset-8 font-semibold' : ''
-            }`}
-          >
-            Legal Pages
-          </button>
+          {(
+            [
+              { key: 'All', label: 'सर्व विषय (All)' },
+              { key: 'Polity', label: 'राज्यघटना (Polity)' },
+              { key: 'History', label: 'इतिहास (History)' },
+              { key: 'Geography', label: 'भूगोल (Geography)' },
+              { key: 'Economy', label: 'अर्थशास्त्र (Economy)' },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.key}
+              onClick={() => handleSubjectChange(item.key)}
+              className={`hover:text-stone-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                selectedSubject === item.key
+                  ? 'text-[#9A3412] underline underline-offset-8 font-semibold'
+                  : ''
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
         </nav>
 
-        {/* Zone 3: 1 primary action */}
+        {/* Zone 3: 1 primary action (Reset Practice) */}
         <div className="flex items-center gap-3 shrink-0">
           <button
-            onClick={() => handleOpenCreateModal(activeSubdomain === 'all' ? 'notes' : activeSubdomain)}
-            className="px-4 py-2 text-xs font-medium text-white bg-[#9A3412] hover:bg-[#7C2D12] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            onClick={handleResetQuiz}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1C1917] hover:bg-stone-800 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            Publish Content
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>सराव रीसेट करा</span>
           </button>
         </div>
       </header>
 
-      {/* Mobile Navigation Bar (visible only on small screens) */}
-      <div className="md:hidden flex items-center gap-2 overflow-x-auto px-4 py-2.5 bg-[#F4F0EA] border-b border-stone-200 text-xs font-medium">
-        {(
-          [
-            { id: 'editorial', label: 'Editorial Hub' },
-            { id: 'subdomains', label: 'Subdomains' },
-            { id: 'bookstore', label: 'Bookstore' },
-            { id: 'monetization', label: 'Monetization' },
-            { id: 'compliance', label: 'Legal Pages' },
-          ] as const
-        ).map((item) => (
-          <button
-            key={item.id}
-            onClick={() => {
-              setReadingArticleId(null);
-              setActiveTab(item.id);
-            }}
-            className={`px-3 py-1.5 rounded whitespace-nowrap shrink-0 ${
-              activeTab === item.id ? 'bg-stone-900 text-white' : 'text-stone-700'
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      {/* Main Two-Zone MCQ Practice Workspace */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
+        {/* Top Filter & Mode Control Toolbar */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 mb-6 border-b border-stone-200">
+          <div>
+            <p className="text-xs font-mono uppercase tracking-widest text-[#9A3412]">
+              MPSC STATIC MCQ QUESTION BANK · सराव प्रश्नसंच
+            </p>
+            <h1 className="font-editorial text-2xl sm:text-3xl font-semibold text-stone-900 mt-1">
+              राज्यसेवा व कम्बाईन वस्तुनिष्ठ बहुपर्यायी प्रश्न (MCQ Practice)
+            </h1>
+          </div>
 
-      {/* Main Content Area */}
-      <main className="flex-1">
-        {currentReadingArticle ? (
-          <ArticleReaderView
-            article={currentReadingArticle}
-            books={books}
-            onBack={() => setReadingArticleId(null)}
-            onEditArticle={handleOpenEditModal}
-            onBookClick={handleBookClick}
-          />
-        ) : activeTab === 'subdomains' ? (
-          <SubdomainHubView
-            subdomains={subdomains}
-            activeSubdomain={activeSubdomain === 'all' ? 'main' : activeSubdomain}
-            onSelectSubdomain={(key) => {
-              setActiveSubdomain(key);
-              setActiveTab('editorial');
-            }}
-            onAddSubdomain={(newSub) => setSubdomains((prev) => [...prev, newSub])}
-            onOpenPublisherForSubdomain={(key) => handleOpenCreateModal(key)}
-          />
-        ) : activeTab === 'monetization' || activeTab === 'bookstore' ? (
-          <MonetizationSuiteView
-            books={books}
-            sponsoredSlots={sponsoredSlots}
-            adsenseChecks={INITIAL_ADSENSE_CHECKS}
-            onAddBook={(newBook) => setBooks((prev) => [newBook, ...prev])}
-            onUpdateSlotSponsor={handleUpdateSlotSponsor}
-            onNavigateTab={(tab) => {
-              if (tab === 'publish') {
-                handleOpenCreateModal('notes');
-              } else if (tab === 'compliance' || tab === 'subdomains' || tab === 'monetization') {
-                setActiveTab(tab as ActiveTab);
-              }
-            }}
-            onBookClick={handleBookClick}
-          />
-        ) : activeTab === 'compliance' ? (
-          <CompliancePagesView />
-        ) : (
-          /* Default Editorial Hub View */
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-12">
-            {/* Subdomain Switcher & Operational Utility Strip */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-stone-200">
-              <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#EBE6DF] rounded-lg w-fit">
-                {[
-                  { key: 'all', label: 'All Subdomains (Network)' },
-                  { key: 'main', label: 'mpscsarathi.online' },
-                  { key: 'notes', label: 'notes.mpscsarathi' },
-                  { key: 'pyq', label: 'pyq.mpscsarathi' },
-                  { key: 'currentaffairs', label: 'currentaffairs.mpscsarathi' },
-                  { key: 'books', label: 'books.mpscsarathi' },
-                ].map((tab) => (
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Search Box */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentIndex(0);
+                }}
+                placeholder="प्रश्न किंवा विषय शोधा..."
+                className="pl-9 pr-4 py-2 text-xs bg-white border border-stone-300 rounded-lg focus:outline-none focus:border-[#9A3412] w-56 sm:w-64"
+              />
+            </div>
+
+            {/* Mode Switcher: Step-by-Step vs All List */}
+            <div className="flex items-center gap-1 p-1 bg-stone-200/70 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setViewMode('single')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                  viewMode === 'single'
+                    ? 'bg-white text-stone-900 shadow-2xs font-semibold'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>एक-एक प्रश्न (Quiz)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                  viewMode === 'list'
+                    ? 'bg-white text-stone-900 shadow-2xs font-semibold'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <ListChecks className="w-3.5 h-3.5" />
+                <span>सर्व प्रश्न (List)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Subject Filter Strip */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-6">
+          {(
+            [
+              { key: 'All', label: 'सर्व विषय (20)' },
+              { key: 'Polity', label: 'भारतीय राज्यघटना' },
+              { key: 'History', label: 'आधुनिक इतिहास' },
+              { key: 'Geography', label: 'महाराष्ट्राचा भूगोल' },
+              { key: 'Economy', label: 'अर्थव्यवस्था व सांख्यिकी' },
+              { key: 'Science', label: 'सामान्य विज्ञान' },
+            ] as const
+          ).map((subj) => (
+            <button
+              key={subj.key}
+              onClick={() => handleSubjectChange(subj.key)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors cursor-pointer whitespace-nowrap ${
+                selectedSubject === subj.key
+                  ? 'bg-[#1C1917] text-white border-[#1C1917]'
+                  : 'bg-white text-stone-700 border-stone-300 hover:bg-stone-100'
+              }`}
+            >
+              {subj.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Two-Column Educational Sandbox Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left 8 Cols: Interactive MCQ Stage */}
+          <div className="lg:col-span-8 space-y-6">
+            {filteredQuestions.length === 0 ? (
+              <div className="bg-white border border-stone-200 rounded-lg p-12 text-center space-y-3">
+                <p className="font-editorial text-lg text-stone-800">
+                  या विषयासाठी किंवा शोधासाठी कोणताही MCQ प्रश्न आढळला नाही.
+                </p>
+                <button
+                  onClick={() => {
+                    setSelectedSubject('All');
+                    setSearchQuery('');
+                  }}
+                  className="px-4 py-2 bg-[#1C1917] text-white text-xs font-medium rounded-md cursor-pointer"
+                >
+                  सर्व प्रश्न दाखवा (Reset Filter)
+                </button>
+              </div>
+            ) : viewMode === 'single' && activeQuestion ? (
+              <div className="space-y-4">
+                {renderMcqCard(activeQuestion, safeIndex)}
+
+                {/* Previous / Next Navigation Bar */}
+                <div className="flex items-center justify-between gap-4 bg-white border border-stone-200 rounded-lg p-4">
                   <button
-                    key={tab.key}
-                    onClick={() => setActiveSubdomain(tab.key as SubdomainKey | 'all')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      activeSubdomain === tab.key
-                        ? 'bg-white text-stone-900 shadow-2xs font-semibold'
-                        : 'text-stone-600 hover:text-stone-900'
-                    }`}
+                    type="button"
+                    disabled={safeIndex === 0}
+                    onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-md border border-stone-300 text-stone-800 hover:bg-stone-100 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer whitespace-nowrap"
                   >
-                    {tab.label}
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>मागील प्रश्न (Previous)</span>
                   </button>
-                ))}
+
+                  <span className="font-mono-tabular text-xs font-semibold text-stone-600">
+                    {safeIndex + 1} / {filteredQuestions.length}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={safeIndex >= filteredQuestions.length - 1}
+                    onClick={() =>
+                      setCurrentIndex((i) => Math.min(filteredQuestions.length - 1, i + 1))
+                    }
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-md bg-[#1C1917] hover:bg-stone-800 text-white disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <span>पुढील प्रश्न (Next)</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* List Mode: All Filtered MCQs */
+              <div className="space-y-6">
+                {filteredQuestions.map((q, idx) => renderMcqCard(q, idx))}
+              </div>
+            )}
+          </div>
+
+          {/* Right 4 Cols: Scoreboard & Question Palette */}
+          <aside className="lg:col-span-4 space-y-6 lg:sticky lg:top-24">
+            {/* Live Scoreboard Card */}
+            <div className="bg-white border border-stone-200 rounded-lg p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+                <h3 className="font-editorial text-lg font-semibold text-stone-900">
+                  तुमचा निकाल (Live Scoreboard)
+                </h3>
+                <button
+                  type="button"
+                  onClick={handleResetQuiz}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-[#9A3412] hover:underline cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>रीसेट करा</span>
+                </button>
               </div>
 
-              <div className="text-xs text-stone-600 font-mono">
-                <span>Active Portal: </span>
-                <strong className="text-[#9A3412]">https://{activeHostLabel}</strong>
-                <span className="mx-2">·</span>
-                <span>AdSense Ready</span>
+              <div className="grid grid-cols-2 gap-3 font-mono-tabular">
+                <div className="p-3 bg-[#FBF9F5] border border-stone-200 rounded">
+                  <span className="text-[11px] text-stone-500 block font-sans">एकूण प्रश्न (Total)</span>
+                  <span className="text-xl font-bold text-stone-900">{stats.total}</span>
+                </div>
+                <div className="p-3 bg-[#FBF9F5] border border-stone-200 rounded">
+                  <span className="text-[11px] text-stone-500 block font-sans">सोडवलेले (Attempted)</span>
+                  <span className="text-xl font-bold text-stone-900">{stats.attempted}</span>
+                </div>
+                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded">
+                  <span className="text-[11px] text-emerald-800 block font-sans">बरोबर (Correct)</span>
+                  <span className="text-xl font-bold text-emerald-800">{stats.correct}</span>
+                </div>
+                <div className="p-3 bg-red-50/70 border border-red-200 rounded">
+                  <span className="text-[11px] text-red-800 block font-sans">चुकीचे (Wrong)</span>
+                  <span className="text-xl font-bold text-red-800">{stats.incorrect}</span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-stone-100 flex items-center justify-between text-xs font-mono-tabular">
+                <span className="text-stone-600 font-sans">अचूकता प्रमाण (Accuracy):</span>
+                <span className="text-base font-bold text-[#9A3412]">{stats.accuracy}%</span>
               </div>
             </div>
 
-            {/* 2-Column Hero Split with Equal Height Balance */}
-            <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-              <div className="lg:col-span-7 flex flex-col justify-between bg-white border border-stone-200 rounded-lg p-6 sm:p-8">
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-stone-500">
-                    <span className="text-[#9A3412] font-semibold uppercase tracking-wider">
-                      महाराष्ट्र लोकसेवा आयोग मार्गदर्शन पोर्टल
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span>राज्यसेवा व कम्बाईन २०२६</span>
-                  </div>
-
-                  <h1 className="font-editorial text-3xl sm:text-4xl lg:text-[40px] font-semibold text-stone-900 leading-[1.18] text-balance">
-                    MPSC सारथी: सखोल मराठी अभ्यास साहित्य, सबडोमेन नेटवर्क आणि संदर्भ ग्रंथालय
-                  </h1>
-
-                  <p className="text-base text-stone-600 leading-relaxed max-w-2xl">
-                    <code className="font-mono text-stone-900">mpscsarathi.online</code> वर राज्यसेवा (नवीन वर्णनात्मक पॅटर्न), संयुक्त गट ब व क पूर्व आणि मुख्य परीक्षेसाठी १५००+ शब्दांचे मूळ संपादकीय लेख, मागील प्रश्नपत्रिकांचे अचूक विश्लेषण आणि प्रमाण संदर्भ पुस्तकांचे परीक्षण एकाच छताखाली उपलब्ध आहे.
-                  </p>
-                </div>
-
-                <div className="pt-6 mt-6 border-t border-stone-200 flex flex-wrap items-center gap-3">
-                  <button
-                    onClick={() => setReadingArticleId(articles[0]?.id || null)}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1C1917] hover:bg-stone-800 text-white text-xs sm:text-sm font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    <span>मुख्य संपादकीय लेख वाचा</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleOpenCreateModal('notes')}
-                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#F4F0EA] hover:bg-stone-200 text-stone-900 border border-stone-300 text-xs sm:text-sm font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    <Plus className="w-4 h-4 text-[#9A3412]" />
-                    <span>नवीन पेज व कंटेंट जोडा</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('subdomains')}
-                    className="px-4 py-2.5 text-xs sm:text-sm font-medium text-[#9A3412] hover:underline cursor-pointer whitespace-nowrap"
-                  >
-                    सबडोमेन DNS सेटअप पहा →
-                  </button>
-                </div>
+            {/* Question Palette Grid */}
+            <div className="bg-white border border-stone-200 rounded-lg p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-editorial text-base font-semibold text-stone-900">
+                  प्रश्न क्रमांक तक्ता (Question Palette)
+                </h3>
+                <span className="text-xs font-mono text-stone-500">{filteredQuestions.length} MCQs</span>
               </div>
 
-              <div className="lg:col-span-5 flex">
-                <EditorialStudyDeskGraphic activeHost={activeHostLabel} />
-              </div>
-            </section>
+              <div className="grid grid-cols-5 gap-2 font-mono-tabular">
+                {filteredQuestions.map((q, idx) => {
+                  const ans = userAnswers[q.id];
+                  const isCurrent = viewMode === 'single' && idx === safeIndex;
 
-            {/* Full-Width 4-Column KPI & Monetization Proof Strip Below Hero Split */}
-            <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                {
-                  kicker: 'SUBDOMAIN ECOSYSTEM',
-                  metric: `${subdomains.length} Connected Portals`,
-                  detail: 'notes · pyq · currentaffairs · books',
-                  actionLabel: 'Manage Subdomains',
-                  onClick: () => setActiveTab('subdomains'),
-                },
-                {
-                  kicker: 'ADSENSE CONTENT QUALITY',
-                  metric: '1,560+ Avg Words',
-                  detail: 'Original bilingual Marathi & English notes',
-                  actionLabel: 'Add New Study Page',
-                  onClick: () => handleOpenCreateModal('notes'),
-                },
-                {
-                  kicker: 'AFFILIATE BOOKSTORE',
-                  metric: '8% – 10% Commission',
-                  detail: 'Amazon & Flipkart verified MPSC textbooks',
-                  actionLabel: 'Open Bookstore Hub',
-                  onClick: () => setActiveTab('bookstore'),
-                },
-                {
-                  kicker: 'SPONSORED PARTNERSHIPS',
-                  metric: '₹11,300/mo Booked',
-                  detail: 'Direct Pune & Sambhajinagar coaching tie-ups',
-                  actionLabel: 'View Rate Card',
-                  onClick: () => setActiveTab('monetization'),
-                },
-              ].map((stat, idx) => (
-                <div
-                  key={idx}
-                  className="p-5 bg-white border border-stone-200 rounded-lg flex flex-col justify-between"
-                >
-                  <div>
-                    <p className="text-[11px] font-mono uppercase tracking-wider text-stone-500">
-                      {stat.kicker}
-                    </p>
-                    <p className="font-mono-tabular text-xl font-bold text-stone-900 mt-1">
-                      {stat.metric}
-                    </p>
-                    <p className="text-xs text-stone-600 mt-1">{stat.detail}</p>
-                  </div>
-                  <button
-                    onClick={stat.onClick}
-                    className="mt-4 pt-2.5 border-t border-stone-100 text-left text-xs font-semibold text-[#9A3412] hover:underline cursor-pointer"
-                  >
-                    {stat.actionLabel} →
-                  </button>
-                </div>
-              ))}
-            </section>
+                  let btnClass = 'bg-[#FBF9F5] text-stone-700 border-stone-300 hover:border-stone-500';
+                  if (ans !== undefined) {
+                    if (ans === q.correctIndex) {
+                      btnClass = 'bg-emerald-600 text-white border-emerald-700 font-semibold';
+                    } else {
+                      btnClass = 'bg-red-600 text-white border-red-700 font-semibold';
+                    }
+                  }
+                  if (isCurrent) {
+                    btnClass += ' ring-2 ring-[#9A3412] ring-offset-1';
+                  }
 
-            {/* Filter & Search Toolbar for Study Pages */}
-            <section className="space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-stone-200">
-                <div>
-                  <h2 className="font-editorial text-2xl font-semibold text-stone-900">
-                    नवीनतम परीक्षभिमुख लेख आणि विषयनिहाय पेजेस ({filteredArticles.length})
-                  </h2>
-                  <p className="text-xs text-stone-500 mt-0.5">
-                    प्रत्येक लेख AdSense च्या High-Value Content निकषांनुसार सविस्तर मुद्दे, PYQ सराव आणि संदर्भ पुस्तकांसह तयार केला आहे.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  {/* Live Search Input */}
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="विषय किंवा घटक शोधा (उदा. पंचायत राज)..."
-                      className="pl-9 pr-4 py-2 text-xs bg-white border border-stone-300 rounded-lg focus:outline-none focus:border-[#9A3412] w-64"
-                    />
-                  </div>
-
-                  {/* Interactive Subject Filter */}
-                  <div className="flex items-center gap-1 p-1 bg-stone-200/70 rounded-lg overflow-x-auto">
-                    {['All', 'Polity', 'History', 'Economy', 'Geography', 'Exam Strategy'].map((subj) => (
-                      <button
-                        key={subj}
-                        onClick={() => setSelectedSubject(subj)}
-                        className={`px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                          selectedSubject === subj
-                            ? 'bg-white text-stone-900 shadow-2xs'
-                            : 'text-stone-600 hover:text-stone-900'
-                        }`}
-                      >
-                        {subj}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Articles Grid */}
-              {filteredArticles.length === 0 ? (
-                <div className="p-12 bg-white border border-stone-200 rounded-lg text-center space-y-3">
-                  <p className="font-editorial text-lg text-stone-800">
-                    या फिल्टरसाठी कोणताही लेख आढळला नाही.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setActiveSubdomain('all');
-                      setSelectedSubject('All');
-                      setSearchQuery('');
-                    }}
-                    className="px-4 py-2 bg-[#1C1917] text-white text-xs font-medium rounded-md cursor-pointer"
-                  >
-                    सर्व लेख पुन्हा दाखवा (Reset Filters)
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {filteredArticles.map((art) => (
-                    <article
-                      key={art.id}
-                      className="bg-white border border-stone-200 rounded-lg p-6 flex flex-col justify-between hover:border-stone-300 transition-colors"
+                  return (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => {
+                        setViewMode('single');
+                        setCurrentIndex(idx);
+                      }}
+                      className={`h-9 rounded border text-xs transition-all cursor-pointer ${btnClass}`}
                     >
-                      <div>
-                        {/* Unboxed Metadata with Typographic Separators */}
-                        <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-stone-500">
-                          <span className="text-[#9A3412] font-semibold">
-                            {art.subdomain === 'main'
-                              ? 'mpscsarathi.online'
-                              : `${art.subdomain}.mpscsarathi.online`}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span>{art.subject}</span>
-                          <span aria-hidden="true">·</span>
-                          <span className="font-mono-tabular">{art.wordCount} words</span>
-                          <span aria-hidden="true">·</span>
-                          <span className="font-mono-tabular">{art.readTimeMinutes} min read</span>
-                          {art.isSponsored && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span className="text-amber-800 font-semibold">Sponsored</span>
-                            </>
-                          )}
-                        </div>
-
-                        <h3
-                          onClick={() => setReadingArticleId(art.id)}
-                          className="font-editorial text-xl font-semibold text-stone-900 mt-3 leading-snug hover:text-[#9A3412] transition-colors cursor-pointer"
-                        >
-                          {art.titleMr}
-                        </h3>
-                        <p className="text-xs text-stone-500 mt-1">{art.titleEn}</p>
-
-                        <p className="text-sm text-stone-700 mt-3 leading-relaxed line-clamp-3">
-                          {art.excerpt}
-                        </p>
-                      </div>
-
-                      <div className="mt-6 pt-4 border-t border-stone-100 flex items-center justify-between gap-3">
-                        <div className="text-xs text-stone-500 font-mono-tabular">
-                          <span>Updated: {art.lastUpdated}</span>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => handleOpenEditModal(art)}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-stone-600 hover:text-stone-900 cursor-pointer whitespace-nowrap"
-                          >
-                            <FileEdit className="w-3.5 h-3.5" />
-                            <span>Edit</span>
-                          </button>
-                          <button
-                            onClick={() => setReadingArticleId(art.id)}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1C1917] hover:bg-stone-800 text-white text-xs font-medium rounded transition-colors cursor-pointer whitespace-nowrap"
-                          >
-                            <span>संपूर्ण लेख वाचा</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* Featured MPSC Affiliate Bookstore Section (books.mpscsarathi.online) */}
-            <section className="pt-6 border-t border-stone-200 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                <div>
-                  <p className="text-xs font-mono uppercase tracking-widest text-[#9A3412]">
-                    BOOKS.MPSCSARATHI.ONLINE · VERIFIED AFFILIATE BOOKLIST
-                  </p>
-                  <h2 className="font-editorial text-2xl font-semibold text-stone-900 mt-1">
-                    टॉपर्सनी शिफारस केलेली MPSC संदर्भ पुस्तके (Affiliate Store)
-                  </h2>
-                </div>
-                <button
-                  onClick={() => setActiveTab('bookstore')}
-                  className="text-xs font-semibold text-[#9A3412] hover:underline cursor-pointer whitespace-nowrap"
-                >
-                  सर्व पुस्तके आणि कमिशन डॅशबोर्ड पहा →
-                </button>
+                      {String(idx + 1).padStart(2, '0')}
+                    </button>
+                  );
+                })}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {books.map((book) => (
-                  <div
-                    key={book.id}
-                    className="bg-white border border-stone-200 rounded-lg p-4 flex flex-col justify-between space-y-4"
-                  >
-                    <div className="space-y-3">
-                      <div className="w-32 mx-auto pt-2">
-                        <BookCoverIllustration
-                          theme={book.coverTheme}
-                          titleMr={book.titleMr}
-                          subject={book.subject}
-                          author={book.author}
-                          editionYear={book.editionYear}
-                        />
-                      </div>
-                      <div>
-                        <p className="text-[11px] font-mono text-stone-500">{book.subject}</p>
-                        <h3 className="font-editorial text-sm font-semibold text-stone-900 mt-0.5 line-clamp-2">
-                          {book.titleMr}
-                        </h3>
-                        <p className="text-xs text-stone-600 mt-1 truncate">{book.author}</p>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-stone-100 space-y-2.5">
-                      <div className="flex items-baseline justify-between font-mono-tabular">
-                        <span className="text-base font-bold text-stone-900">₹{book.dealPriceInr}</span>
-                        <span className="text-xs text-stone-400 line-through">₹{book.mrpInr}</span>
-                      </div>
-                      <a
-                        href={`https://www.amazon.in/s?k=${encodeURIComponent(book.titleEn)}&tag=${book.amazonTag}`}
-                        target="_blank"
-                        rel="sponsored nofollow noopener noreferrer"
-                        onClick={() => handleBookClick(book.id)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-[#1C1917] hover:bg-stone-800 text-white text-xs font-medium rounded transition-colors whitespace-nowrap"
-                      >
-                        <span>Amazon वर सवलतीत पहा</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                  </div>
-                ))}
+              <div className="pt-3 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-500">
+                <span>हिरवा = बरोबर उत्तर</span>
+                <span>·</span>
+                <span>लाल = चुकीचे उत्तर</span>
+                <span>·</span>
+                <span>पांढरा = न सोडवलेला</span>
               </div>
-            </section>
-          </div>
-        )}
+            </div>
+          </aside>
+        </div>
       </main>
 
-      {/* Institutional Editorial Footer with AdSense Mandatory Links */}
-      <footer className="bg-[#F4F0EA] border-t border-stone-300/80 mt-16 py-10 px-4 sm:px-8 text-xs text-stone-600">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-stone-300/80">
-          <div className="space-y-2">
-            <p className="font-editorial text-base font-bold text-stone-900">mpscsarathi.online</p>
-            <p className="leading-relaxed">
-              महाराष्ट्र लोकसेवा आयोग (MPSC) राज्यसेवा, संयुक्त गट ब व क परीक्षेसाठी स्वतंत्र शैक्षणिक मार्गदर्शन पोर्टल.
-            </p>
-            <p className="text-[11px] text-stone-500">
-              Non-Government Educational Portal · Pune, Maharashtra
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <p className="font-semibold text-stone-900 uppercase tracking-wider font-mono">
-              Subdomain Network
-            </p>
-            <ul className="space-y-1.5 font-mono">
-              {subdomains.slice(0, 5).map((s) => (
-                <li key={s.host}>
-                  <button
-                    onClick={() => {
-                      setReadingArticleId(null);
-                      setActiveSubdomain(s.key);
-                      setActiveTab('editorial');
-                    }}
-                    className="hover:text-[#9A3412] cursor-pointer"
-                  >
-                    https://{s.host}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="space-y-2">
-            <p className="font-semibold text-stone-900 uppercase tracking-wider font-mono">
-              Monetization & Partners
-            </p>
-            <ul className="space-y-1.5">
-              <li>
-                <button
-                  onClick={() => {
-                    setReadingArticleId(null);
-                    setActiveTab('monetization');
-                  }}
-                  className="hover:text-[#9A3412] cursor-pointer"
-                >
-                  Google AdSense Readiness Audit
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => {
-                    setReadingArticleId(null);
-                    setActiveTab('bookstore');
-                  }}
-                  className="hover:text-[#9A3412] cursor-pointer"
-                >
-                  Affiliate Reference Bookstore
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => {
-                    setReadingArticleId(null);
-                    setActiveTab('monetization');
-                  }}
-                  className="hover:text-[#9A3412] cursor-pointer"
-                >
-                  Sponsored Post Rate Card & Media Kit
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          <div className="space-y-2">
-            <p className="font-semibold text-stone-900 uppercase tracking-wider font-mono">
-              Mandatory AdSense Legal Pages
-            </p>
-            <ul className="space-y-1.5">
-              <li>
-                <button
-                  onClick={() => {
-                    setReadingArticleId(null);
-                    setActiveTab('compliance');
-                  }}
-                  className="hover:text-[#9A3412] cursor-pointer"
-                >
-                  About Us (आमच्याविषयी)
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => {
-                    setReadingArticleId(null);
-                    setActiveTab('compliance');
-                  }}
-                  className="hover:text-[#9A3412] cursor-pointer"
-                >
-                  Privacy Policy (DART Cookie Clause)
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => {
-                    setReadingArticleId(null);
-                    setActiveTab('compliance');
-                  }}
-                  className="hover:text-[#9A3412] cursor-pointer"
-                >
-                  Disclaimer & Affiliate Disclosure
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => {
-                    setReadingArticleId(null);
-                    setActiveTab('compliance');
-                  }}
-                  className="hover:text-[#9A3412] cursor-pointer"
-                >
-                  Contact Us & Terms of Service
-                </button>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-stone-500">
-          <p>© 2026 mpscsarathi.online · All Rights Reserved. Amazon Associates & Flipkart Affiliate Disclosure.</p>
-          <p>अस्वीकरण: या वेबसाईटचा महाराष्ट्र लोकसेवा आयोगाशी (mpsc.gov.in) कोणताही अधिकृत शासकीय संबंध नाही.</p>
-        </div>
+      {/* Minimal Footer */}
+      <footer className="border-t border-stone-200 bg-[#F4F0EA] py-6 px-4 sm:px-8 text-center text-xs text-stone-600 mt-12">
+        <p>© 2026 mpscsarathi.online · MPSC राज्यसेवा व कम्बाईन वस्तुनिष्ठ प्रश्नसंच (Static MCQ Portal)</p>
       </footer>
-
-      {/* New Page / Update Content Modal */}
-      <ContentPublisherModal
-        isOpen={isPublisherOpen}
-        initialSubdomain={publisherSubdomain}
-        editingArticle={editingArticle}
-        books={books}
-        onClose={() => {
-          setIsPublisherOpen(false);
-          setEditingArticle(null);
-        }}
-        onSaveArticle={handleSaveArticle}
-      />
     </div>
   );
 }
