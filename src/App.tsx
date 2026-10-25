@@ -161,13 +161,15 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Static Answer & Explanation */}
-                <div className="pt-3 border-t border-stone-100 text-xs sm:text-sm text-stone-700 leading-relaxed">
-                  <p className="font-semibold text-stone-900">
-                    उत्तर: पर्याय ({q.correctIndex + 1}) — {q.options[q.correctIndex]}
-                  </p>
-                  <p className="mt-1 text-stone-600">स्पष्टीकरण: {q.explanation}</p>
-                </div>
+                {/* Answer & Explanation shown after clicking an option */}
+                {isAnswered && (
+                  <div className="pt-3 border-t border-stone-100 text-xs sm:text-sm text-stone-700 leading-relaxed">
+                    <p className="font-semibold text-stone-900">
+                      उत्तर: पर्याय ({q.correctIndex + 1}) — {q.options[q.correctIndex]}
+                    </p>
+                    <p className="mt-1 text-stone-600">स्पष्टीकरण: {q.explanation}</p>
+                  </div>
+                )}
               </article>
             );
           })}
