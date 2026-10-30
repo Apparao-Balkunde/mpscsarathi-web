@@ -30,7 +30,7 @@ export default function App() {
           }}
           className="font-editorial text-xl font-bold tracking-tight text-stone-900 whitespace-nowrap shrink-0"
         >
-          mpscsarathi.online
+          practice.mpscsarathi.online
         </a>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-stone-600">
