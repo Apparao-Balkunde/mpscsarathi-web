@@ -1,5 +1,8 @@
 import { STATISTICS_MCQ_QUESTIONS } from './statisticsMcqData';
 import { TEST_PAPER_1_QUESTIONS } from './testPaper1Data';
+import { TEST_PAPER_2_QUESTIONS } from './testPaper2Data';
+import { TEST_PAPER_3_QUESTIONS } from './testPaper3Data';
+import { HISTORY_TOPICWISE_QUESTIONS } from './historyTopicwiseData';
 
 export type McqSubject = 'Polity' | 'History' | 'Geography' | 'Economy' | 'Science';
 
@@ -16,6 +19,9 @@ export interface McqQuestion {
 
 export const INITIAL_MCQ_QUESTIONS: McqQuestion[] = [
   ...TEST_PAPER_1_QUESTIONS,
+  ...TEST_PAPER_2_QUESTIONS,
+  ...TEST_PAPER_3_QUESTIONS,
+  ...HISTORY_TOPICWISE_QUESTIONS,
   ...STATISTICS_MCQ_QUESTIONS,
   // POLITY (१ ते ८)
   {
