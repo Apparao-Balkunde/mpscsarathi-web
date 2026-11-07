@@ -1,4 +1,5 @@
 import { STATISTICS_MCQ_QUESTIONS } from './statisticsMcqData';
+import { TEST_PAPER_1_QUESTIONS } from './testPaper1Data';
 
 export type McqSubject = 'Polity' | 'History' | 'Geography' | 'Economy' | 'Science';
 
@@ -14,6 +15,7 @@ export interface McqQuestion {
 }
 
 export const INITIAL_MCQ_QUESTIONS: McqQuestion[] = [
+  ...TEST_PAPER_1_QUESTIONS,
   ...STATISTICS_MCQ_QUESTIONS,
   // POLITY (१ ते ८)
   {
