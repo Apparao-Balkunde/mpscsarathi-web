@@ -2,6 +2,7 @@ import { STATISTICS_MCQ_QUESTIONS } from './statisticsMcqData';
 import { ADDITIONAL_STATICS_QUESTIONS } from './additionalStatisticsData';
 import { ADDITIONAL_STATICS_QUESTIONS_2 } from './additionalStatisticsData2';
 import { ADDITIONAL_STATICS_QUESTIONS_3 } from './additionalStatisticsData3';
+import { ADDITIONAL_STATICS_QUESTIONS_4 } from './additionalStatisticsData4';
 import { TEST_PAPER_1_QUESTIONS } from './testPaper1Data';
 import { TEST_PAPER_2_QUESTIONS } from './testPaper2Data';
 import { TEST_PAPER_3_QUESTIONS } from './testPaper3Data';
@@ -28,6 +29,7 @@ export const INITIAL_MCQ_QUESTIONS: McqQuestion[] = [
   ...ADDITIONAL_STATICS_QUESTIONS,
   ...ADDITIONAL_STATICS_QUESTIONS_2,
   ...ADDITIONAL_STATICS_QUESTIONS_3,
+  ...ADDITIONAL_STATICS_QUESTIONS_4,
   ...STATISTICS_MCQ_QUESTIONS,
   // POLITY (१ ते ८)
   {
